@@ -29,7 +29,6 @@ const sfx: {f: string; em: number; vol?: number}[] = [
   {f: 'receber', em: T.resposta},
   {f: 'rabisco_longo', em: T.tentaCompletar, vol: 0.7},
   {f: 'rebobinar', em: T.volta, vol: 0.9},
-  ...Array.from({length: 10}, (_, i) => ({f: 'rabisco_curto', em: T.letras + i * 9, vol: 0.75})),
   {f: 'digitando', em: T.digitando2 + 2, vol: 0.5},
   {f: 'receber', em: T.oferta},
   {f: 'enviar', em: T.jaEntendi},
@@ -48,7 +47,8 @@ const cMetade = 'M292 58 C 286 36, 272 26, 260 27 C 240 28, 230 48, 234 70 C 240
 const cCompleta = 'M292 58 C 298 36, 312 26, 324 27 C 344 28, 354 48, 350 70 C 344 100, 316 120, 292 136';
 
 // letras na ordem de escrita (o C já existe)
-const letras: {d: string; dx?: number}[] = [
+type Letra = {d: string; dx?: number};
+const letrasBF: Letra[] = [
   {d: 'M24 30 C 22 70, 26 100, 24 132 M24 32 C 80 22, 82 78, 26 80 C 92 76, 92 138, 24 132'},           // B
   {d: 'M96 30 C 94 66, 98 100, 96 132 C 116 133, 132 130, 148 132'},                                    // L
   {d: 'M160 134 C 170 100, 180 64, 190 34 C 202 70, 212 104, 222 132 M172 98 C 186 94, 198 94, 212 92'},// A
@@ -144,7 +144,38 @@ const Digitando: React.FC<{de: number; ate: number}> = ({de, ate}) => {
 };
 
 // ---------- Vídeo ----------
-export const Conversa: React.FC = () => {
+export type Roteiro = {
+  cMetade: string; cCompleta: string; letras: Letra[]; viewBox: string;
+  oferta: React.ReactNode; legal: string; topo?: number;
+};
+
+export const roteiroBlackFriday: Roteiro = {
+  cMetade, cCompleta, letras: letrasBF, viewBox: '-10 -12 840 172',
+  oferta: <>Na Direcional tem apê de 60m², entrada em 60x e parcelas a partir de R$&nbsp;299 👀</>,
+  legal: 'Black Friday Direcional 2026. Condições válidas por tempo limitado, para unidades e empreendimentos participantes, sujeitas a análise de crédito. Consulte o regulamento.',
+};
+
+// Riva | Casa Prado — o meio coração vira o C de CASA
+const rC = 'M82 58 C 76 36, 62 26, 50 27 C 30 28, 20 48, 24 70 C 30 100, 58 120, 82 136';
+const rCc = 'M82 58 C 88 36, 102 26, 114 27 C 134 28, 144 48, 140 70 C 134 100, 106 120, 82 136';
+export const roteiroRiva: Roteiro = {
+  cMetade: rC, cCompleta: rCc, viewBox: '-14 -12 760 172', topo: 300,
+  letras: [
+    {d: 'M104 134 C 114 100, 124 64, 134 34 C 146 70, 156 104, 166 132 M116 98 C 130 94, 142 94, 156 92'},   // A
+    {d: 'M234 44 C 222 26, 188 28, 190 54 C 192 78, 236 80, 236 106 C 236 136, 196 138, 186 118'},             // S
+    {d: 'M254 134 C 264 100, 274 64, 284 34 C 296 70, 306 104, 316 132 M266 98 C 280 94, 292 94, 306 92'},   // A
+    {d: 'M362 134 C 361 100, 358 64, 360 36 C 412 26, 418 84, 363 80'},                                         // P
+    {d: 'M432 134 C 431 100, 428 64, 430 36 C 482 26, 488 84, 433 80 C 452 96, 467 112, 484 136'},             // R
+    {d: 'M500 134 C 510 100, 520 64, 530 34 C 542 70, 552 104, 562 132 M512 98 C 526 94, 538 94, 552 92'},   // A
+    {d: 'M584 36 C 582 70, 586 104, 584 134 M582 36 C 648 26, 656 128, 586 132'},                               // D
+    {d: 'M684 34 C 642 32, 640 134, 680 132 C 720 130, 724 36, 684 34'},                                        // O
+  ],
+  oferta: <>O Casa Prado da Riva tá com fluxo de pagamento 20/80 e parcelas mensais a partir de R$&nbsp;1.900 👀</>,
+  legal: 'Casa Prado | Riva. Condições válidas por tempo limitado, para unidades participantes, sujeitas a análise de crédito. Consulte o regulamento.',
+};
+
+export const Conversa: React.FC<{roteiro?: Roteiro}> = ({roteiro = roteiroBlackFriday}) => {
+  const {cMetade, cCompleta, letras, viewBox, oferta, legal, topo = 380} = roteiro;
   const frame = useCurrentFrame();
   const prog = (a: number, dur: number) =>
     interpolate(frame, [a, a + dur], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: ease});
@@ -166,7 +197,7 @@ export const Conversa: React.FC = () => {
         backgroundImage: 'radial-gradient(circle at 20px 20px,#000 2px,transparent 3px),radial-gradient(circle at 60px 70px,#000 1.5px,transparent 2.5px)',
         backgroundSize: '90px 90px'}} />
 
-      <div style={{position: 'absolute', left: 0, right: 0, top: 380, padding: '0 34px'}}>
+      <div style={{position: 'absolute', left: 0, right: 0, top: topo, padding: '0 34px'}}>
         <Linha lado="out" inicio={T.amor}><Texto lado="out" h="23:58">amor</Texto></Linha>
         <Linha lado="out" inicio={T.completa}><Texto lado="out" h="23:58">completa?</Texto></Linha>
 
@@ -180,7 +211,7 @@ export const Conversa: React.FC = () => {
         <Digitando de={T.digitando1} ate={T.resposta} />
         <Linha lado="in" inicio={T.resposta}>
           <Desenho lado="in" w={860} h={200} hora="23:59">
-            <svg width={860} height={200} viewBox="-10 -12 840 172" preserveAspectRatio="xMidYMid meet">
+            <svg width={860} height={200} viewBox={viewBox} preserveAspectRatio="xMidYMid meet">
               <g transform="translate(0,0)"><Traco d={cMetade} p={1} /></g>
               <Traco d={cCompleta} p={pCompletar} />
               {letras.map((l, i) => (
@@ -193,12 +224,12 @@ export const Conversa: React.FC = () => {
 
         <Digitando de={T.digitando2} ate={T.oferta} />
         <Linha lado="in" inicio={T.oferta}>
-          <Texto lado="in" h="23:59">Na Direcional tem apê de 60m², entrada em 60x e parcelas a partir de R$&nbsp;299 👀</Texto>
+          <Texto lado="in" h="23:59">{oferta}</Texto>
         </Linha>
         <Linha lado="out" inicio={T.jaEntendi}><Texto lado="out" h="23:59">Já entendi...</Texto></Linha>
       </div>
 
-      {sfx.map((x, i) => (
+      {[...sfx, ...letras.map((_, i) => ({f: 'rabisco_curto', em: T.letras + i * T.porLetra, vol: 0.75}))].map((x: {f: string; em: number; vol?: number}, i) => (
         <Sequence key={i} from={x.em} layout="none">
           <Audio src={staticFile(`sfx/${x.f}.wav`)} volume={x.vol ?? 1} />
         </Sequence>
@@ -208,8 +239,7 @@ export const Conversa: React.FC = () => {
         <>
           <div style={{position: 'absolute', left: 90, right: 90, top: 1570, textAlign: 'center', fontSize: 21, color: '#555',
             lineHeight: 1.35, opacity: cta.style.opacity}}>
-            Black Friday Direcional 2026. Condições válidas por tempo limitado, para unidades e empreendimentos participantes,
-            sujeitas a análise de crédito. Consulte o regulamento.
+            {legal}
           </div>
           <div style={{position: 'absolute', left: 0, right: 0, top: 1665, display: 'flex', justifyContent: 'center'}}>
             <div style={{background: '#fff', borderRadius: 60, padding: '22px 64px', fontSize: 54, fontWeight: 600, color: '#111',
