@@ -1,21 +1,40 @@
 import React from 'react';
-import {AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig, Easing} from 'remotion';
+import {AbsoluteFill, Audio, Sequence, staticFile, interpolate, spring, useCurrentFrame, useVideoConfig, Easing} from 'remotion';
 
 // ---------- Linha do tempo (frames @30fps) ----------
 const T = {
   amor: 15,
   completa: 40,
   meioCoracao: 70,          // balão com a metade do coração (desenhada)
-  resposta: 125,            // balão de resposta com a mesma metade
-  tentaCompletar: 145,      // traço tenta fechar o coração
-  volta: 180,               // traço recua
-  letras: 205,              // escrita letra a letra
+  digitando1: 110,          // "digitando..." antes da resposta
+  resposta: 150,            // balão de resposta com a mesma metade
+  tentaCompletar: 168,      // traço tenta fechar o coração
+  volta: 202,               // traço recua
+  letras: 228,              // escrita letra a letra
   porLetra: 9,
-  oferta: 320,
-  jaEntendi: 365,
-  cta: 400,
+  digitando2: 330,
+  oferta: 370,
+  jaEntendi: 410,
+  cta: 445,
 };
-export const DURACAO = 480;
+export const DURACAO = 540;
+
+// ---------- Efeitos sonoros ----------
+const sfx: {f: string; em: number; vol?: number}[] = [
+  {f: 'enviar', em: T.amor},
+  {f: 'enviar', em: T.completa},
+  {f: 'enviar', em: T.meioCoracao},
+  {f: 'rabisco_longo', em: T.meioCoracao + 4, vol: 0.8},
+  {f: 'digitando', em: T.digitando1 + 2, vol: 0.5},
+  {f: 'receber', em: T.resposta},
+  {f: 'rabisco_longo', em: T.tentaCompletar, vol: 0.7},
+  {f: 'rebobinar', em: T.volta, vol: 0.9},
+  ...Array.from({length: 10}, (_, i) => ({f: 'rabisco_curto', em: T.letras + i * 9, vol: 0.75})),
+  {f: 'digitando', em: T.digitando2 + 2, vol: 0.5},
+  {f: 'receber', em: T.oferta},
+  {f: 'enviar', em: T.jaEntendi},
+  {f: 'cta', em: T.cta - 10, vol: 0.9},
+];
 
 const verde = '#d9fdd3';
 const ease = Easing.bezier(0.4, 0, 0.2, 1);
@@ -107,6 +126,23 @@ const Desenho: React.FC<{lado: 'out' | 'in'; w: number; h: number; hora: string;
   </div>
 );
 
+const Digitando: React.FC<{de: number; ate: number}> = ({de, ate}) => {
+  const frame = useCurrentFrame();
+  const {style} = usePop(de);
+  if (frame < de || frame >= ate) return null;
+  return (
+    <div style={{display: 'flex', margin: '14px 0', transformOrigin: 'left bottom', ...style}}>
+      <div style={{background: '#fff', borderRadius: 22, padding: '26px 30px', display: 'flex', gap: 12, boxShadow: '0 2px 2px rgba(0,0,0,.08)'}}>
+        {[0, 1, 2].map((i) => {
+          const k = Math.sin(((frame - de) / 30) * Math.PI * 2.4 - i * 0.9);
+          return <div key={i} style={{width: 18, height: 18, borderRadius: 9, background: '#8696a0',
+            opacity: 0.45 + 0.55 * Math.max(0, k), transform: `translateY(${-6 * Math.max(0, k)}px)`}} />;
+        })}
+      </div>
+    </div>
+  );
+};
+
 // ---------- Vídeo ----------
 export const Conversa: React.FC = () => {
   const frame = useCurrentFrame();
@@ -141,6 +177,7 @@ export const Conversa: React.FC = () => {
           </Desenho>
         </Linha>
 
+        <Digitando de={T.digitando1} ate={T.resposta} />
         <Linha lado="in" inicio={T.resposta}>
           <Desenho lado="in" w={860} h={200} hora="23:59">
             <svg width={860} height={200} viewBox="-10 -12 840 172" preserveAspectRatio="xMidYMid meet">
@@ -154,11 +191,18 @@ export const Conversa: React.FC = () => {
           <Fwd />
         </Linha>
 
+        <Digitando de={T.digitando2} ate={T.oferta} />
         <Linha lado="in" inicio={T.oferta}>
           <Texto lado="in" h="23:59">Na Direcional tem apê de 60m², entrada em 60x e parcelas a partir de R$&nbsp;299 👀</Texto>
         </Linha>
         <Linha lado="out" inicio={T.jaEntendi}><Texto lado="out" h="23:59">Já entendi...</Texto></Linha>
       </div>
+
+      {sfx.map((x, i) => (
+        <Sequence key={i} from={x.em} layout="none">
+          <Audio src={staticFile(`sfx/${x.f}.wav`)} volume={x.vol ?? 1} />
+        </Sequence>
+      ))}
 
       {cta.visivel && (
         <>
@@ -169,7 +213,7 @@ export const Conversa: React.FC = () => {
           </div>
           <div style={{position: 'absolute', left: 0, right: 0, top: 1665, display: 'flex', justifyContent: 'center'}}>
             <div style={{background: '#fff', borderRadius: 60, padding: '22px 64px', fontSize: 54, fontWeight: 600, color: '#111',
-              whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.12)', ...cta.style}}>🏠 Quero meu apê</div>
+              whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.12)', ...cta.style}}>🏠 Link na bio</div>
           </div>
         </>
       )}
