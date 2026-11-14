@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{width:1080px;height:1920px;font-family:"Helvetica Neue",Roboto,Arial,sans-serif;
+ background:#efe7dd;position:relative;overflow:hidden}
+.bg{position:absolute;inset:0;opacity:.07;
+ background-image:radial-gradient(circle at 20px 20px,#000 2px,transparent 3px),
+ radial-gradient(circle at 60px 70px,#000 1.5px,transparent 2.5px);background-size:90px 90px}
+.chat{position:absolute;left:0;right:0;top:380px;padding:0 34px}
+.row{display:flex;margin:14px 0}
+.out{justify-content:flex-end}.in{justify-content:flex-start}
+.b{border-radius:22px;padding:18px 26px;font-size:40px;color:#111;display:flex;align-items:flex-end;gap:18px;
+ box-shadow:0 2px 2px rgba(0,0,0,.08)}
+.out .b{background:#d9fdd3}.in .b{background:#fff}
+.t{font-size:28px;color:#667781;white-space:nowrap;display:flex;align-items:center;gap:6px}
+.ticks{color:#53bdeb;font-size:30px;letter-spacing:-12px;margin-right:10px}
+.img{padding:8px;border-radius:22px;position:relative}
+.out .img{background:#d9fdd3}.in .img{background:#fff}
+.canvas{background:#f2f2f2;border-radius:16px;position:relative;overflow:hidden}
+.canvas .t{position:absolute;right:18px;bottom:10px;color:#fff;z-index:2}
+.canvas:after{content:"";position:absolute;left:0;right:0;bottom:0;height:70px;
+ background:linear-gradient(transparent,rgba(0,0,0,.45))}
+.fwd{width:60px;height:60px;border-radius:50%;background:#fff;align-self:center;margin:0 18px;
+ display:flex;align-items:center;justify-content:center;box-shadow:0 2px 4px rgba(0,0,0,.12);font-size:30px;color:#555}
+svg path{fill:none;stroke:#111;stroke-width:7;stroke-linecap:round;stroke-linejoin:round}
+.legal{position:absolute;left:90px;right:90px;top:1570px;text-align:center;font-size:21px;color:#555;line-height:1.35}
+.cta{position:absolute;left:50%;transform:translateX(-50%);top:1665px;background:#fff;border-radius:60px;
+ padding:22px 64px;font-size:54px;white-space:nowrap;font-weight:600;color:#111;box-shadow:0 4px 14px rgba(0,0,0,.12)}
+</style></head><body>
+<div class="bg"></div>
+<div class="chat">
+  <div class="row out"><div class="b">amor <span class="t">23:58 <span class="ticks">✓✓</span></span></div></div>
+  <div class="row out"><div class="b">completa? <span class="t">23:58 <span class="ticks">✓✓</span></span></div></div>
+
+  <div class="row out"><div class="fwd">➦</div>
+    <div class="img"><div class="canvas" style="width:780px;height:470px">
+      <svg width="780" height="470" viewBox="0 0 780 470">
+        <path d="M372 150 C 368 210, 374 280, 370 340"/>
+      </svg>
+      <span class="t">23:58 <span class="ticks" style="color:#fff">✓✓</span></span>
+    </div></div>
+  </div>
+
+  <div class="row in">
+    <div class="img"><div class="canvas" style="width:860px;height:200px">
+      <svg width="860" height="200" viewBox="-40 -25 790 200" preserveAspectRatio="xMidYMid meet">
+        <path d="M34 40 C 30 70, 36 100, 32 128 M30 38 C 92 22, 108 122, 34 126"/>
+        <path d="M104 46 C 102 70, 107 104, 103 128"/>
+        <path d="M140 130 C 139 100, 136 60, 138 36 C 190 26, 196 84, 141 80 C 160 96, 175 112, 192 134"/>
+        <path d="M250 34 C 236 36, 222 34, 212 38 C 214 70, 210 100, 214 128 C 228 126, 240 128, 254 122 M214 80 C 224 80, 232 78, 242 76"/>
+        <path d="M318 50 C 292 22, 262 50, 266 88 C 270 124, 304 134, 322 108"/>
+        <path d="M350 40 C 348 70, 352 100, 348 130"/>
+        <path d="M414 38 C 368 34, 368 134, 410 130 C 450 128, 452 40, 414 38"/>
+        <path d="M472 132 C 470 100, 474 66, 472 40 C 488 70, 506 100, 524 124 C 522 96, 526 60, 524 30"/>
+        <path d="M546 134 C 556 100, 568 64, 578 36 C 590 70, 600 104, 612 130 M560 96 C 574 92, 586 92, 600 90"/>
+        <path d="M640 28 C 636 64, 642 96, 638 128 C 660 130, 680 126, 704 128"/>
+      </svg>
+      <span class="t">23:59</span>
+    </div></div>
+    <div class="fwd">➦</div>
+  </div>
+  <div class="row in"><div class="b">Tá com apê de 60m², entrada em 60x e parcelas a partir de R$&nbsp;299 👀 <span class="t">23:59</span></div></div>
+  <div class="row out"><div class="b">Já entendi... <span class="t">23:59 <span class="ticks">✓✓</span></span></div></div>
+</div>
+<div class="legal">Black Friday Direcional 2026. Condições válidas por tempo limitado, para unidades e empreendimentos participantes, sujeitas a análise de crédito. Consulte o regulamento.</div>
+<div class="cta">🏠 Quero meu apê</div>
+</body></html>
