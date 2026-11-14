@@ -146,7 +146,7 @@ const Digitando: React.FC<{de: number; ate: number}> = ({de, ate}) => {
 // ---------- Vídeo ----------
 export type Roteiro = {
   cMetade: string; cCompleta: string; letras: Letra[]; viewBox: string;
-  oferta: React.ReactNode; legal: string; topo?: number;
+  oferta: React.ReactNode; legal: string; topo?: number; cta?: string;
 };
 
 export const roteiroBlackFriday: Roteiro = {
@@ -159,7 +159,7 @@ export const roteiroBlackFriday: Roteiro = {
 const rC = 'M82 58 C 76 36, 62 26, 50 27 C 30 28, 20 48, 24 70 C 30 100, 58 120, 82 136';
 const rCc = 'M82 58 C 88 36, 102 26, 114 27 C 134 28, 144 48, 140 70 C 134 100, 106 120, 82 136';
 export const roteiroRiva: Roteiro = {
-  cMetade: rC, cCompleta: rCc, viewBox: '-14 -12 760 172', topo: 300,
+  cMetade: rC, cCompleta: rCc, viewBox: '-14 -12 760 172', topo: 300, cta: '💌 Manda pra quem é assim',
   letras: [
     {d: 'M104 134 C 114 100, 124 64, 134 34 C 146 70, 156 104, 166 132 M116 98 C 130 94, 142 94, 156 92'},   // A
     {d: 'M234 44 C 222 26, 188 28, 190 54 C 192 78, 236 80, 236 106 C 236 136, 196 138, 186 118'},             // S
@@ -175,7 +175,7 @@ export const roteiroRiva: Roteiro = {
 };
 
 export const Conversa: React.FC<{roteiro?: Roteiro}> = ({roteiro = roteiroBlackFriday}) => {
-  const {cMetade, cCompleta, letras, viewBox, oferta, legal, topo = 380} = roteiro;
+  const {cMetade, cCompleta, letras, viewBox, oferta, legal, topo = 380, cta: ctaTexto = '🏠 Link na bio'} = roteiro;
   const frame = useCurrentFrame();
   const prog = (a: number, dur: number) =>
     interpolate(frame, [a, a + dur], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: ease});
@@ -243,7 +243,7 @@ export const Conversa: React.FC<{roteiro?: Roteiro}> = ({roteiro = roteiroBlackF
           </div>
           <div style={{position: 'absolute', left: 0, right: 0, top: 1665, display: 'flex', justifyContent: 'center'}}>
             <div style={{background: '#fff', borderRadius: 60, padding: '22px 64px', fontSize: 54, fontWeight: 600, color: '#111',
-              whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.12)', ...cta.style}}>🏠 Link na bio</div>
+              whiteSpace: 'nowrap', boxShadow: '0 4px 14px rgba(0,0,0,.12)', ...cta.style}}>{ctaTexto}</div>
           </div>
         </>
       )}
