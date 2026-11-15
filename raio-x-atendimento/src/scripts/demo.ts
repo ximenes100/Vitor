@@ -3,8 +3,9 @@
 // Sem ANTHROPIC_API_KEY a análise é simulada; com a chave, é a análise real com IA.
 
 import { randomBytes } from "node:crypto";
-import { processarFila } from "../analise/fila.js";
 import { config } from "../config.js";
+import { avancarCiclo } from "../semanal/ciclo.js";
+import { inicioDaSemana, limitesDaSemana, semanaDe, somarDias } from "../semanal/semanas.js";
 import { migrar, pool, query } from "../db.js";
 import { ETAPAS, ETIQUETA_DA_ETAPA, ETIQUETA_PESSOAL } from "../funil.js";
 import { salvarMensagens, type MensagemNormalizada } from "../ingestao.js";
@@ -113,13 +114,62 @@ const ROTEIROS: Record<string, { cliente: string; diasAtras: number; falas: Fala
       [12, "c", "Combinado, beijos"],
     ],
   },
+  ia_personalizada: {
+    cliente: "Bruno Henrique",
+    diasAtras: 0,
+    falas: [
+      [0, "c", "Oi, vi a casa no condomínio Vila Rica. Ainda está à venda?"],
+      [3, "k", "Oi Bruno, boa tarde! Aqui é o Rafael. Está sim 😊 Você procura pra morar ou investir? E qual faixa de valor está pensando?"],
+      [15, "c", "Pra morar, até 1,2 milhão. Tenho dois filhos e trabalho de casa, preciso de um escritório"],
+      [22, "k", "Perfeito, Bruno! Como você comentou que trabalha de casa e tem dois filhos, separei 3 opções com escritório separado:\n\n• Vila Rica: 4 quartos, escritório com vista, R$ 1.150.000\n• Jardins do Lago: 3 quartos + escritório, perto de escola bilíngue, R$ 1.080.000\n• Alto da Serra: 3 suítes, home office com entrada independente, R$ 1.190.000\n\nQual delas faz mais sentido pra rotina de vocês? Posso te mostrar duas no sábado às 10h."],
+      [50, "c", "A do Jardins do Lago me chamou atenção. Sábado às 10h dá certo"],
+      [53, "k", "Combinado! Visita confirmada sábado às 10h no Jardins do Lago. Te mando a localização na sexta 👍"],
+      [2 * DIA, "c", "Perfeito, obrigado!"],
+    ],
+  },
+  ia_generica: {
+    cliente: "Aline Rocha",
+    diasAtras: 0,
+    falas: [
+      [0, "c", "Boa tarde, tem apartamento de 2 quartos para alugar no centro? Aceita pet?"],
+      [2 * HORA, "k", "Olá! Agradecemos seu contato. Confira abaixo algumas opções disponíveis:\n\n✅ Apartamento 1: 2 quartos, 65m², R$ 2.300\n✅ Apartamento 2: 2 quartos, 70m², R$ 2.500\n✅ Apartamento 3: 3 quartos, 90m², R$ 3.200\n\nEstamos à disposição para quaisquer esclarecimentos. Atenciosamente, Equipe Comercial."],
+      [3 * HORA, "c", "Mas aceita pet? Tenho um cachorro"],
+      [DIA, "k", "Olá! Seguem mais informações sobre nossos imóveis disponíveis para locação:\n\n- Contratos a partir de 30 meses\n- Garantias: fiador, seguro fiança ou caução\n- Documentação: RG, CPF e comprovante de renda\n\nQualquer dúvida, estamos à disposição!"],
+      [3 * DIA, "c", "Deixa, já achei outro"],
+    ],
+  },
 };
 
-const CORRETORES: { nome: string; equipe: string; roteiros: string[] }[] = [
-  { nome: "Rafael Souza", equipe: "Equipe Zona Sul", roteiros: ["bom_atendimento", "fechou", "cliente_esperando", "pessoal"] },
-  { nome: "Camila Ribeiro", equipe: "Equipe Zona Sul", roteiros: ["sem_qualificacao", "objecao_preco", "audio_demais", "pessoal"] },
-  { nome: "Diego Fernandes", equipe: "Equipe Centro", roteiros: ["objecao_preco", "sem_qualificacao", "cliente_esperando", "bom_atendimento"] },
+// Cada corretor tem conversas ANTES do marco de uso de IA (semanas negativas) e DEPOIS (semanas 0 e 1).
+// Rafael passa a usar IA de forma personalizada e melhora; Camila usa IA de forma genérica e não melhora;
+// Diego não muda o jeito de atender.
+const CORRETORES: { nome: string; equipe: string; conversas: [roteiro: string, semana: number][] }[] = [
+  {
+    nome: "Rafael Souza",
+    equipe: "Equipe Zona Sul",
+    conversas: [["sem_qualificacao", -5], ["objecao_preco", -3], ["audio_demais", -2], ["ia_personalizada", 0], ["fechou", 0], ["bom_atendimento", 1], ["pessoal", 1]],
+  },
+  {
+    nome: "Camila Ribeiro",
+    equipe: "Equipe Zona Sul",
+    conversas: [["objecao_preco", -4], ["sem_qualificacao", -2], ["ia_generica", 0], ["ia_generica", 1], ["audio_demais", 1], ["pessoal", 0]],
+  },
+  {
+    nome: "Diego Fernandes",
+    equipe: "Equipe Centro",
+    conversas: [["sem_qualificacao", -4], ["cliente_esperando", -3], ["objecao_preco", -1], ["sem_qualificacao", 0], ["cliente_esperando", 1], ["objecao_preco", 1]],
+  },
 ];
+
+// Semana 0 = primeira semana depois do marco; semana 1 = a seguinte (limitada à semana atual).
+const semanaAtual = semanaDe(new Date());
+const primeiraDepois = somarDias(inicioDaSemana(config.marcoIa), 7);
+function inicioDaConversa(semana: number): number {
+  const base = semana < 0 ? somarDias(inicioDaSemana(config.marcoIa), 7 * (semana + 1) - 7) : somarDias(primeiraDepois, 7 * semana);
+  const alvo = base > semanaAtual ? semanaAtual : base;
+  // Terça-feira às 10h (horário de Brasília) da semana escolhida.
+  return limitesDaSemana(alvo).inicio.getTime() + 34 * HORA * 60_000;
+}
 
 await migrar();
 await query("DELETE FROM corretores WHERE instancia LIKE 'demo-%'");
@@ -132,37 +182,40 @@ for (const [i, c] of CORRETORES.entries()) {
      VALUES ($1, $2, $3, $4, 'conectado', now(), $5, now()) RETURNING id`,
     [c.nome, c.equipe, token, `demo-${i + 1}`, `55${11_99000_0000 + i}`],
   );
-  // Etiquetas como se o corretor tivesse criado no WhatsApp Business (a última fica faltando, para mostrar o aviso).
+  // Etiquetas como se o corretor tivesse criado no WhatsApp Business (Camila esqueceu uma, para mostrar o aviso).
   const nomes = [...ETAPAS.map((e) => ETIQUETA_DA_ETAPA[e]), ETIQUETA_PESSOAL];
   for (const [j, nome] of nomes.entries()) {
     if (i === 1 && j === nomes.length - 1) continue;
     await query("INSERT INTO etiquetas (corretor_id, label_id, nome) VALUES ($1, $2, $3)", [id, String(j + 1), nome]);
   }
 
-  for (const chave of c.roteiros) {
+  for (const [n, [chave, semana]] of c.conversas.entries()) {
     const r = ROTEIROS[chave];
     const jid = `55${telefone++}@s.whatsapp.net`;
-    const inicio = Date.now() - r.diasAtras * DIA * 60_000;
-    const msgs: MensagemNormalizada[] = r.falas.map(([min, quem, texto, tipo], n) => ({
-      id: `${chave}-${i}-${n}`,
-      remoteJid: jid,
-      doCorretor: quem === "k",
-      tipo: tipo ?? "texto",
-      texto: texto || null,
-      enviadaEm: new Date(inicio + min * 60_000),
-      nomeContato: quem === "c" ? r.cliente : undefined,
-    }));
+    const inicio = inicioDaConversa(semana);
+    const msgs: MensagemNormalizada[] = r.falas
+      .map(([min, quem, texto, tipo], k) => ({
+        id: `${chave}-${i}-${n}-${k}`,
+        remoteJid: jid,
+        doCorretor: quem === "k",
+        tipo: tipo ?? "texto",
+        texto: texto || null,
+        enviadaEm: new Date(inicio + min * 60_000),
+        nomeContato: quem === "c" ? r.cliente : undefined,
+      }))
+      .filter((m) => m.enviadaEm.getTime() < Date.now());
     await salvarMensagens(id, msgs);
   }
   console.log(`Corretor de demonstração: ${c.nome} -> ${config.urlPublica}/c/${token}`);
 }
 
-console.log(config.ia.ativa ? "Analisando com IA (pode levar alguns minutos)…" : "Sem ANTHROPIC_API_KEY: rodando a análise SIMULADA.");
-let total = 0;
-for (let rodada = 0; rodada < 5; rodada++) {
-  const n = await processarFila(100);
-  total += n;
-  if (n === 0) break;
+console.log(config.ia.ativa ? "Rodando o ciclo semanal com IA (pode levar alguns minutos)…" : "Sem ANTHROPIC_API_KEY: rodando o ciclo semanal com análise SIMULADA.");
+if (config.ia.ativa && config.ia.usarLote) console.log("Dica: rode com USAR_LOTE=nao para a demonstração não esperar o processamento em lote.");
+// Na demonstração, os relatórios são da semana atual (para incluir as conversas mais recentes).
+for (let passo = 0; passo < 50; passo++) {
+  const feito = await avancarCiclo({ semana: semanaAtual });
+  console.log(`  ${feito}`);
+  if (feito === "nada a fazer" || feito === "lotes") break;
 }
-console.log(`${total} conversa(s) analisada(s). Painel do gestor: ${config.urlPublica}/gestor`);
+console.log(`Painel do gestor: ${config.urlPublica}/gestor`);
 await pool.end();

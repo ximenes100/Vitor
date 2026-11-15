@@ -7,6 +7,9 @@ import { etiquetasFaltando } from "../etiquetas.js";
 import { followups, panoramaCorretor } from "../resumo.js";
 import { nomeContato, seloEtapa } from "./conversa.js";
 import { html, nota, raw, tempoRelativo, type Raw } from "./html.js";
+import { serieSemanal } from "../semanal/estatisticas.js";
+import { somarDias, ultimaSemanaCompleta } from "../semanal/semanas.js";
+import { blocoRelatorioCorretor, graficoSemanal, ultimoRelatorioCorretor } from "./semanal.js";
 
 export interface CorretorDaPagina {
   id: number;
@@ -81,7 +84,7 @@ export async function telaPainelCorretor(c: CorretorDaPagina, aviso?: string): P
     `SELECT DISTINCT ON (c.id) c.id AS conversa_id, c.nome_contato, c.remote_jid, c.etapa, a.nota_geral, a.resultado, a.criada_em
      FROM conversas c JOIN analises a ON a.conversa_id = c.id
      WHERE c.corretor_id = $1 AND c.tipo = 'cliente'
-     ORDER BY c.id, a.criada_em DESC`,
+     ORDER BY c.id, a.semana DESC`,
     [c.id],
   );
   analises.sort((a, b) => Number(a.nota_geral) - Number(b.nota_geral));
@@ -92,6 +95,8 @@ export async function telaPainelCorretor(c: CorretorDaPagina, aviso?: string): P
     [c.id],
   );
   const primeiroNome = c.nome.split(" ")[0];
+  const relatorio = await ultimoRelatorioCorretor(c.id);
+  const serie = await serieSemanal(c.id, somarDias(ultimaSemanaCompleta(), -7 * 11));
 
   return html`
     <h1>Seu raio-x, ${primeiroNome}</h1>
@@ -108,7 +113,11 @@ export async function telaPainelCorretor(c: CorretorDaPagina, aviso?: string): P
       <div class="kpi"><div class="valor">${p.parados7dias}</div><div class="rotulo">Parados há 7+ dias</div></div>
       <div class="kpi"><div class="valor">${nota(p.notaMedia)}</div><div class="rotulo">Sua nota média</div></div>
     </div>
-    ${p.principalPerda ? html`<div class="info">📉 Onde você mais perde clientes hoje: <b>${NOME_CATEGORIA_PERDA[p.principalPerda]}</b>. As dicas abaixo mostram como melhorar.</div>` : ""}
+    ${relatorio
+      ? blocoRelatorioCorretor(relatorio.conteudo, relatorio.semana, (id) => `/c/${c.token}/conversa/${id}`)
+      : html`<div class="info">Toda segunda-feira você recebe aqui (e no seu WhatsApp) o relatório da semana: o que melhorou, onde focar e dicas para usar melhor a IA.</div>`}
+    ${p.principalPerda ? html`<div class="info">📉 Onde você mais perde clientes hoje: <b>${NOME_CATEGORIA_PERDA[p.principalPerda]}</b>.</div>` : ""}
+    <div class="card"><h2>Sua evolução semana a semana</h2>${graficoSemanal(serie)}</div>
 
     <div class="card"><h2>Retome hoje (${pendentes.length})</h2>
       ${pendentes.length
@@ -125,7 +134,7 @@ export async function telaPainelCorretor(c: CorretorDaPagina, aviso?: string): P
         : html`<p class="suave">Ninguém esperando. Bom trabalho! 👏</p>`}
     </div>
 
-    <div class="card"><h2>Suas conversas analisadas</h2>
+    <div class="card"><h2>Suas conversas analisadas (semana mais recente de cada uma)</h2>
       <p class="suave pequeno">Das notas mais baixas para as mais altas: comece pelas que mais têm a ensinar.</p>
       ${analises.length
         ? html`<div class="tabela"><table><tr><th>Cliente</th><th>Etapa</th><th>Nota</th><th>Principal dica</th><th></th></tr>

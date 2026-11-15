@@ -59,16 +59,54 @@ CREATE TABLE IF NOT EXISTS mensagens (
 );
 CREATE INDEX IF NOT EXISTS mensagens_conversa ON mensagens (conversa_id, enviada_em);
 
+-- Uma análise por conversa por semana (segunda a domingo, horário de Brasília).
+-- Avalia só as mensagens daquela semana, usando as anteriores como contexto.
 CREATE TABLE IF NOT EXISTS analises (
   id            SERIAL PRIMARY KEY,
   conversa_id   INT NOT NULL REFERENCES conversas(id) ON DELETE CASCADE,
+  semana        DATE NOT NULL,                   -- segunda-feira da semana avaliada
+  periodo       TEXT NOT NULL,                   -- antes | depois (do marco de uso de IA)
   criada_em     TIMESTAMPTZ NOT NULL DEFAULT now(),
   modelo        TEXT NOT NULL,                   -- modelo usado, ou 'simulada' no modo demonstração
-  tipo          TEXT NOT NULL,
   etapa         TEXT,
   nota_geral    NUMERIC(4,1),
   categoria_perda TEXT,                          -- onde a conversa travou (para agrupar no painel)
+  uso_ia        TEXT,                            -- nenhum | uso_personalizado | uso_generico (indício)
+  primeira_mensagem INT NOT NULL DEFAULT 1,      -- número (#) da primeira mensagem da semana na conversa
   resultado     JSONB NOT NULL,                  -- análise completa
-  metricas      JSONB NOT NULL                   -- métricas calculadas sem IA
+  metricas      JSONB NOT NULL,                  -- métricas calculadas sem IA (só da semana)
+  UNIQUE (conversa_id, semana)
 );
-CREATE INDEX IF NOT EXISTS analises_conversa ON analises (conversa_id, criada_em DESC);
+CREATE INDEX IF NOT EXISTS analises_semana ON analises (semana);
+
+CREATE TABLE IF NOT EXISTS falhas_analise (
+  conversa_id INT NOT NULL REFERENCES conversas(id) ON DELETE CASCADE,
+  semana      DATE NOT NULL,
+  erro        TEXT,
+  tentativas  INT NOT NULL DEFAULT 1,
+  PRIMARY KEY (conversa_id, semana)
+);
+
+-- Lotes enviados para processamento assíncrono (Batch API: metade do preço).
+CREATE TABLE IF NOT EXISTS lotes (
+  id            TEXT PRIMARY KEY,                -- id do lote na Anthropic
+  tipo          TEXT NOT NULL,                   -- conversas | relatorios_corretor
+  semana        DATE,
+  criado_em     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  finalizado_em TIMESTAMPTZ,
+  pedidos       INT NOT NULL,
+  erros         INT NOT NULL DEFAULT 0
+);
+
+-- Relatórios semanais: um por corretor e um do time (corretor_id NULL).
+CREATE TABLE IF NOT EXISTS relatorios (
+  id            SERIAL PRIMARY KEY,
+  semana        DATE NOT NULL,
+  corretor_id   INT REFERENCES corretores(id) ON DELETE CASCADE,
+  modelo        TEXT NOT NULL,
+  conteudo      JSONB NOT NULL,
+  entrada       JSONB,                           -- números usados no relatório (para conferência)
+  criado_em     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  enviado_em    TIMESTAMPTZ                      -- quando foi enviado no WhatsApp do corretor
+);
+CREATE UNIQUE INDEX IF NOT EXISTS relatorios_unicos ON relatorios (semana, COALESCE(corretor_id, 0));

@@ -1,6 +1,7 @@
 // Tela de uma conversa: análise completa + mensagens numeradas. Usada pelo gestor e pelo corretor.
 
-import { CRITERIOS, NOME_CATEGORIA_PERDA, NOME_CRITERIO, type Analise } from "../analise/esquema.js";
+import { CRITERIOS, NOME_CATEGORIA_PERDA, NOME_CRITERIO, NOME_USO_IA, type Analise, type CategoriaPerda, type UsoIa } from "../analise/esquema.js";
+import { rotuloSemana } from "../semanal/semanas.js";
 import { formatarData } from "../analise/transcricao.js";
 import { query, queryOne } from "../db.js";
 import { NOME_DA_ETAPA, type Etapa } from "../funil.js";
@@ -27,17 +28,28 @@ export function nomeContato(c: { nome_contato: string | null; remote_jid: string
   return c.nome_contato || `+${c.remote_jid.split("@")[0]}`;
 }
 
-export async function telaConversa(conversaId: number, corretorId?: number): Promise<{ titulo: string; corpo: Raw } | undefined> {
+export async function telaConversa(
+  conversaId: number,
+  opcoes: { corretorId?: number; semana?: string; base: string },
+): Promise<{ titulo: string; corpo: Raw } | undefined> {
+  const corretorId = opcoes.corretorId;
   const conversa = await queryOne(
     `SELECT c.*, k.nome AS corretor_nome FROM conversas c JOIN corretores k ON k.id = c.corretor_id
      WHERE c.id = $1 AND ($2::int IS NULL OR c.corretor_id = $2)`,
     [conversaId, corretorId ?? null],
   );
   if (!conversa) return undefined;
-  const ultima = await queryOne<{ resultado: Analise; metricas: Metricas; criada_em: Date; modelo: string; nota_geral: string }>(
-    "SELECT resultado, metricas, criada_em, modelo, nota_geral FROM analises WHERE conversa_id = $1 ORDER BY criada_em DESC LIMIT 1",
+  const semanas = await query<{ semana: string; periodo: string; nota_geral: string; uso_ia: UsoIa; categoria_perda: CategoriaPerda }>(
+    "SELECT to_char(semana, 'YYYY-MM-DD') AS semana, periodo, nota_geral, uso_ia, categoria_perda FROM analises WHERE conversa_id = $1 ORDER BY semana DESC",
     [conversaId],
   );
+  const semanaEscolhida = semanas.find((s) => s.semana === opcoes.semana)?.semana ?? semanas[0]?.semana;
+  const ultima = semanaEscolhida
+    ? await queryOne<{ resultado: Analise; metricas: Metricas; criada_em: Date; modelo: string; nota_geral: string; primeira_mensagem: number }>(
+        "SELECT resultado, metricas, criada_em, modelo, nota_geral, primeira_mensagem FROM analises WHERE conversa_id = $1 AND semana = $2::date",
+        [conversaId, semanaEscolhida],
+      )
+    : undefined;
   const mensagens = await query<{ do_corretor: boolean; tipo: string; texto: string | null; enviada_em: Date }>(
     "SELECT do_corretor, tipo, texto, enviada_em FROM mensagens WHERE conversa_id = $1 ORDER BY enviada_em",
     [conversaId],
@@ -80,6 +92,20 @@ export async function telaConversa(conversaId: number, corretorId?: number): Pro
           </details>
         </div>
       </div>
+      <div class="grade">
+        <div class="card"><h2>🤖 Uso de IA nesta semana</h2>
+          <p><span class="selo ${a.uso_ia.indicio === "uso_generico" ? "alerta" : a.uso_ia.indicio === "uso_personalizado" ? "bom" : ""}">${NOME_USO_IA[a.uso_ia.indicio]}</span></p>
+          <p>${a.uso_ia.comentario}</p>
+          ${a.uso_ia.mensagens.length ? html`<p class="pequeno">Mensagens: ${a.uso_ia.mensagens.map((n) => html`<a href="#m${n}">#${n}</a> `)}</p>` : ""}
+          <p class="suave pequeno">É um indício pela forma das mensagens, não uma medição exata.</p>
+        </div>
+        <div class="card"><h2>📞 Ligação</h2>
+          ${a.ligacao.recomendada
+            ? html`<p><span class="selo alerta">Valia ligar</span> ${a.ligacao.mensagem ? html`<a href="#m${a.ligacao.mensagem}">na mensagem #${a.ligacao.mensagem}</a>` : ""}</p><p>${a.ligacao.motivo}</p>`
+            : html`<p class="suave">${a.ligacao.motivo}</p>`}
+          ${a.objecoes.length ? html`<h3>Objeções do cliente</h3><ul>${a.objecoes.map((o) => html`<li>${o}</li>`)}</ul>` : ""}
+        </div>
+      </div>
       <div class="card"><h2>Perfil do cliente</h2>
         <table>${Object.entries(a.perfil_cliente).map(([k, v]) => html`<tr><th>${ROTULO_PERFIL[k] ?? k}</th><td>${v ?? html`<span class="selo alerta">não descoberto</span>`}</td></tr>`)}</table>
       </div>`
@@ -95,6 +121,13 @@ export async function telaConversa(conversaId: number, corretorId?: number): Pro
 
   return {
     titulo,
-    corpo: html`<h1>${titulo}</h1><p class="suave">Corretor: ${conversa.corretor_nome}${ultima ? ` · analisada em ${formatarData(ultima.criada_em)}` : ""}</p>${analise}${chat}`,
+    corpo: html`<h1>${titulo}</h1>
+      <p class="suave">Corretor: ${conversa.corretor_nome}${semanaEscolhida ? ` · análise da semana ${rotuloSemana(semanaEscolhida)}` : ""}</p>
+      ${semanas.length > 1
+        ? html`<div class="card"><h2>Semanas analisadas</h2><div class="tabela"><table><tr><th>Semana</th><th>Período</th><th>Nota</th><th>Uso de IA</th><th>Onde travou</th></tr>
+            ${semanas.map((s) => html`<tr><td>${s.semana === semanaEscolhida ? html`<b>${rotuloSemana(s.semana)}</b>` : html`<a href="${opcoes.base}?semana=${s.semana}">${rotuloSemana(s.semana)}</a>`}</td><td>${s.periodo === "depois" ? "depois da IA" : "antes da IA"}</td><td>${nota(s.nota_geral)}</td><td>${NOME_USO_IA[s.uso_ia] ?? "—"}</td><td>${NOME_CATEGORIA_PERDA[s.categoria_perda] ?? "—"}</td></tr>`)}
+          </table></div></div>`
+        : ""}
+      ${analise}${chat}`,
   };
 }

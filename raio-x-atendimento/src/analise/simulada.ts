@@ -27,7 +27,7 @@ export function triarSimulada(mensagens: MensagemTranscricao[]): Triagem {
     : { tipo: "pessoal", motivo: "Não menciona imóveis (análise simulada)" };
 }
 
-export function analisarSimulada(mensagens: MensagemTranscricao[], m: Metricas): Analise {
+export function analisarSimulada(mensagens: MensagemTranscricao[], m: Metricas, primeiraMensagem = 1): Analise {
   const corretor = juntar(mensagens, true);
   const cliente = juntar(mensagens, false);
   const todos = `${corretor} ${cliente}`;
@@ -45,7 +45,7 @@ export function analisarSimulada(mensagens: MensagemTranscricao[], m: Metricas):
   if (tem(todos, ["visita confirmada", "combinado", "te espero", "nos vemos"]) && convidouVisita) etapa = "visita_agendada";
   if (tem(todos, ["proposta"])) etapa = "proposta";
   if (tem(todos, ["contrato assinado", "fechado", "parabens pela"])) etapa = "fechou";
-  if (tem(cliente, ["ja comprei", "fechei com outro", "desisti", "nao tenho mais interesse"])) etapa = "perdido";
+  if (tem(cliente, ["ja comprei", "ja achei outro", "fechei com outro", "desisti", "nao tenho mais interesse"])) etapa = "perdido";
 
   const velocidade = m.respostaMedianaMin === null ? null : m.respostaMedianaMin <= 10 ? 9 : m.respostaMedianaMin <= 60 ? 7 : m.respostaMedianaMin <= 240 ? 5 : 2;
   const notasPorCriterio: Record<string, number | null> = {
@@ -95,6 +95,28 @@ export function analisarSimulada(mensagens: MensagemTranscricao[], m: Metricas):
     });
 
   const fechadoOuPerdido = etapa === "fechou" || etapa === "perdido";
+
+  // Indícios de IA: mensagens longas e estruturadas (listas, quebras de linha). Personalizada se retoma o que o cliente disse.
+  const numero = (i: number) => primeiraMensagem + i;
+  const comCaraDeIa = mensagens
+    .map((msg, i) => ({ msg, i }))
+    .filter(({ msg }) => msg.do_corretor && (msg.texto?.length ?? 0) > 220 && /\n|•|✅|1\)|- /.test(msg.texto ?? ""));
+  const personalizada = comCaraDeIa.some(({ msg }) => /voce (comentou|falou|disse|mencionou)|como voce|pelo que voce/.test(normalizarNome(msg.texto ?? "")));
+  const usoIa: Analise["uso_ia"] = comCaraDeIa.length
+    ? {
+        indicio: personalizada ? "uso_personalizado" : "uso_generico",
+        mensagens: comCaraDeIa.map(({ i }) => numero(i)),
+        comentario: personalizada ? "Mensagens estruturadas e ligadas ao que o cliente pediu." : "Mensagens longas e padronizadas, sem ligação com o que o cliente disse.",
+      }
+    : { indicio: "nenhum", mensagens: [], comentario: "Sem indícios de uso de IA." };
+
+  const objecoes: string[] = [];
+  if (tem(cliente, ["caro", "acima do"])) objecoes.push("preço acima do orçamento");
+  if (tem(cliente, ["vou pensar"])) objecoes.push("vai pensar");
+  if (tem(cliente, ["falar com meu", "falar com minha"])) objecoes.push("decidir com o cônjuge");
+  const perguntas = mensagens.filter((x) => !x.do_corretor && (x.texto ?? "").includes("?")).map((x) => x.texto!.slice(0, 80));
+  const indiceObjecao = mensagens.findIndex((x) => !x.do_corretor && tem(normalizarNome(x.texto ?? ""), ["caro", "vou pensar", "acima do"]));
+  const indiceMelhor = mensagens.findIndex((x) => x.do_corretor && (x.texto ?? "").includes("?") && tem(normalizarNome(x.texto ?? ""), ["visita", "conhecer", "orcamento", "regiao", "morar ou investir"]));
   const ultima = mensagens.at(-1);
   const ultimaTexto = normalizarNome(ultima?.texto ?? "");
   const encerramento = /^(ok|okay|blz|beleza|combinado|confirmado|obrigad[oa]|valeu|fechado|perfeito)\b/.test(ultimaTexto) || ultimaTexto.includes("nos vemos");
@@ -113,6 +135,14 @@ export function analisarSimulada(mensagens: MensagemTranscricao[], m: Metricas):
     nota_geral: notaGeral,
     ponto_de_perda: { categoria, mensagem: null, descricao: "Estimado pelas regras da análise simulada." },
     pontos_fortes: [],
+    uso_ia: usoIa,
+    ligacao:
+      indiceObjecao >= 0
+        ? { recomendada: true, mensagem: numero(indiceObjecao), motivo: "Objeção do cliente: uma ligação ajudaria a entender o que pesa na decisão." }
+        : { recomendada: false, mensagem: null, motivo: "Não foi necessária." },
+    objecoes,
+    perguntas_cliente: perguntas,
+    melhor_mensagem: indiceMelhor >= 0 ? { mensagem: numero(indiceMelhor), por_que_funcionou: "Faz uma pergunta que faz a conversa avançar." } : null,
     dicas: dicas.slice(0, 3),
     cliente_aguarda_resposta: clienteAguarda,
     proximo_passo: fechadoOuPerdido

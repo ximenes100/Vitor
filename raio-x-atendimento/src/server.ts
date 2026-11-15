@@ -1,7 +1,8 @@
 import formbody from "@fastify/formbody";
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { corrigirTipo, iniciarFila } from "./analise/fila.js";
+import { iniciarCiclo } from "./semanal/ciclo.js";
+import { corrigirTipo } from "./semanal/conversas.js";
 import { config } from "./config.js";
 import { migrar, query, queryOne } from "./db.js";
 import * as evolution from "./evolution.js";
@@ -12,6 +13,7 @@ import { telaConversa } from "./web/conversa.js";
 import { telaConectar, telaPainelCorretor, type CorretorDaPagina } from "./web/corretor.js";
 import { navGestor, telaCorretor, telaCorretores, telaTime } from "./web/gestor.js";
 import { html, pagina } from "./web/html.js";
+import { telaRelatorioTime } from "./web/semanal.js";
 
 const app = Fastify({ logger: { level: "info" }, bodyLimit: 50 * 1024 * 1024 });
 await app.register(formbody);
@@ -61,8 +63,12 @@ app.register(async (gestor) => {
     return enviarHtml(reply, pagina("Corretor", tela, { nav: navGestor }));
   });
 
-  gestor.get<{ Params: { id: string } }>("/gestor/conversa/:id", async (req, reply) => {
-    const tela = await telaConversa(Number(req.params.id));
+  gestor.get<{ Querystring: { semana?: string } }>("/gestor/relatorio", async (req, reply) =>
+    enviarHtml(reply, pagina("Relatório semanal", await telaRelatorioTime(req.query.semana), { nav: navGestor })),
+  );
+
+  gestor.get<{ Params: { id: string }; Querystring: { semana?: string } }>("/gestor/conversa/:id", async (req, reply) => {
+    const tela = await telaConversa(Number(req.params.id), { semana: req.query.semana, base: `/gestor/conversa/${req.params.id}` });
     if (!tela) return enviarHtml(reply, pagina("Não encontrada", html`<h1>Conversa não encontrada</h1>`, { nav: navGestor }), 404);
     return enviarHtml(reply, pagina(tela.titulo, tela.corpo, { nav: navGestor }));
   });
@@ -126,10 +132,10 @@ app.get<{ Params: { token: string } }>("/c/:token/qr", async (req, reply) => {
   }
 });
 
-app.get<{ Params: { token: string; id: string } }>("/c/:token/conversa/:id", async (req, reply) => {
+app.get<{ Params: { token: string; id: string }; Querystring: { semana?: string } }>("/c/:token/conversa/:id", async (req, reply) => {
   const c = await corretorPorToken(req.params.token);
   if (!c) return naoEncontrado(reply);
-  const tela = await telaConversa(Number(req.params.id), c.id);
+  const tela = await telaConversa(Number(req.params.id), { corretorId: c.id, semana: req.query.semana, base: `/c/${c.token}/conversa/${req.params.id}` });
   if (!tela) return enviarHtml(reply, pagina("Não encontrada", html`<h1>Conversa não encontrada</h1>`), 404);
   return enviarHtml(reply, pagina(tela.titulo, html`<p><a href="/c/${c.token}">← Voltar</a></p>${tela.corpo}`));
 });
@@ -171,7 +177,7 @@ if (config.gestor.senha === "troque-esta-senha") app.log.warn("GESTOR_SENHA est�
 if (!config.ia.ativa) app.log.warn("ANTHROPIC_API_KEY não definida: as análises serão SIMULADAS (modo demonstração).");
 if (!evolution.evolutionConfigurada()) app.log.warn("EVOLUTION_URL/EVOLUTION_API_KEY não definidas: conexão com WhatsApp desativada.");
 
-iniciarFila();
+iniciarCiclo();
 setInterval(() => enviarResumosDiarios().catch((e) => app.log.error(e)), 5 * 60_000);
 
 await app.listen({ port: config.porta, host: "0.0.0.0" });

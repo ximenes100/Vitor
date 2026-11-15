@@ -71,6 +71,14 @@ export type Triagem = z.infer<typeof TriagemSchema>;
 
 const texto = (d: string) => z.string().nullable().describe(d);
 
+export const USO_IA = ["nenhum", "uso_personalizado", "uso_generico"] as const;
+export type UsoIa = (typeof USO_IA)[number];
+export const NOME_USO_IA: Record<UsoIa, string> = {
+  nenhum: "Sem indícios de IA",
+  uso_personalizado: "IA bem usada (personalizada)",
+  uso_generico: "IA mal usada (texto genérico)",
+};
+
 export const AnaliseSchema = z.object({
   etapa: z.enum(ETAPAS).describe("Etapa atual do funil em que o cliente está"),
   confianca_etapa: z.enum(["alta", "media", "baixa"]),
@@ -101,6 +109,30 @@ export const AnaliseSchema = z.object({
     descricao: z.string().describe("O que aconteceu nesse momento, em 1-2 frases"),
   }),
   pontos_fortes: z.array(z.string()).describe("Até 3 coisas que o corretor fez bem"),
+  uso_ia: z.object({
+    indicio: z
+      .enum(USO_IA)
+      .describe(
+        "Indício de que o corretor escreveu mensagens com ajuda de IA (texto muito estruturado, formal, longo, com listas ou linguagem padronizada). " +
+          "uso_personalizado = parece IA, mas adaptado ao que o cliente disse; uso_generico = parece texto pronto, sem ligação com a conversa; nenhum = sem indícios",
+      ),
+    mensagens: z.array(z.number()).describe("Números (#) das mensagens do corretor com esses indícios"),
+    comentario: z.string().describe("Uma frase: o uso ajudou ou atrapalhou o atendimento?"),
+  }),
+  ligacao: z.object({
+    recomendada: z.boolean().describe("true se uma ligação teria ajudado nesta semana (objeção, cliente indeciso, mensagens longas do cliente, negociação)"),
+    mensagem: z.number().nullable().describe("Número (#) da mensagem em que valia ligar"),
+    motivo: z.string(),
+  }),
+  objecoes: z.array(z.string()).describe("Objeções do cliente nesta semana, em poucas palavras cada (ex.: 'preço acima do orçamento')"),
+  perguntas_cliente: z.array(z.string()).describe("Principais perguntas do cliente nesta semana, resumidas"),
+  melhor_mensagem: z
+    .object({
+      mensagem: z.number().describe("Número (#) da mensagem do corretor"),
+      por_que_funcionou: z.string(),
+    })
+    .nullable()
+    .describe("Uma mensagem do corretor desta semana que serve de bom exemplo para treinar o time; null se nenhuma se destaca"),
   dicas: z
     .array(
       z.object({
@@ -124,3 +156,59 @@ export const AnaliseSchema = z.object({
     .describe("null se o negócio já fechou ou foi perdido em definitivo"),
 });
 export type Analise = z.infer<typeof AnaliseSchema>;
+
+export const RelatorioCorretorSchema = z.object({
+  resumo_semana: z.string().describe("2 a 3 frases sobre os atendimentos da semana"),
+  tendencia: z.enum(["melhorando", "estavel", "piorando", "sem_dados"]),
+  evolucao: z.string().describe("Comparação com antes do marco de uso de IA e com as últimas semanas, citando números"),
+  pontos_fortes: z.array(z.string()).describe("Até 3"),
+  focos: z
+    .array(
+      z.object({
+        titulo: z.string(),
+        por_que: z.string().describe("O que se repetiu nas conversas, citando os códigos das conversas (ex.: C123)"),
+        como_fazer: z.string(),
+        exemplo_mensagem: z.string().describe("Mensagem pronta no tom de WhatsApp"),
+      }),
+    )
+    .describe("Os 3 pontos mais importantes para a próxima semana"),
+  dicas_ia: z
+    .array(
+      z.object({
+        titulo: z.string(),
+        como_fazer: z.string(),
+        exemplo_prompt: z.string().describe("Pedido pronto para o corretor colar no Claude, com espaços como [cole aqui a conversa]"),
+      }),
+    )
+    .describe("1 a 3 dicas de como usar melhor a IA no atendimento, baseadas no que foi visto"),
+  dicas_ligacao: z
+    .array(z.object({ situacao: z.string(), recomendacao: z.string() }))
+    .describe("Situações da semana em que ligar ou falar pessoalmente teria ajudado, com orientação de como conduzir a ligação"),
+  mensagem_whatsapp: z
+    .string()
+    .describe("Resumo para enviar ao corretor no WhatsApp: até 900 caracteres, tom de gestor que apoia, com *negrito* do WhatsApp, sem citar códigos de conversa"),
+});
+export type RelatorioCorretor = z.infer<typeof RelatorioCorretorSchema>;
+
+export const RelatorioTimeSchema = z.object({
+  resumo_executivo: z.string().describe("4 a 6 frases para a diretoria"),
+  efeito_ia: z.object({
+    conclusao: z.string().describe("O atendimento melhorou depois do marco de uso de IA? Seja honesto sobre o tamanho da amostra e outros fatores"),
+    evidencias: z.array(z.string()),
+    corretores_evoluindo: z.array(z.string()).describe("Nomes"),
+    corretores_estagnados: z.array(z.string()).describe("Nomes de quem não evoluiu ou piorou"),
+  }),
+  onde_perdemos: z.array(z.object({ tema: z.string(), dimensao: z.string().describe("Quantas conversas, % etc."), recomendacao: z.string() })),
+  objecoes_frequentes: z.array(z.object({ objecao: z.string(), como_responder: z.string() })),
+  perguntas_frequentes: z.array(z.object({ pergunta: z.string(), sugestao: z.string().describe("Como o time pode se preparar ou que material criar") })),
+  boas_praticas: z
+    .array(z.object({ titulo: z.string(), corretor: z.string(), exemplo: z.string().describe("A mensagem real, como foi enviada"), por_que_funciona: z.string() }))
+    .describe("Exemplos reais da semana para usar em treinamento"),
+  uso_ia: z.object({
+    diagnostico: z.string().describe("Como o time está usando a IA, pelo que se vê nas conversas"),
+    recomendacoes: z.array(z.string()),
+  }),
+  treinamentos_sugeridos: z.array(z.object({ tema: z.string(), para_quem: z.string(), formato: z.string() })),
+  alertas: z.array(z.string()).describe("Riscos que pedem ação do gestor (clientes quentes abandonados, quedas bruscas etc.)"),
+});
+export type RelatorioTime = z.infer<typeof RelatorioTimeSchema>;

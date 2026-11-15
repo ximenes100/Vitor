@@ -8,15 +8,18 @@ import { formatarMinutos } from "../metricas.js";
 import { followups, panoramaCorretor } from "../resumo.js";
 import { nomeContato, seloEtapa } from "./conversa.js";
 import { barras, html, nota, raw, tempoRelativo, type Raw } from "./html.js";
+import { indicadores, serieSemanal } from "../semanal/estatisticas.js";
+import { somarDias, ultimaSemanaCompleta } from "../semanal/semanas.js";
+import { blocoEfeitoIa, blocoRelatorioCorretor, dataDoMarco, graficoSemanal, tabelaAntesDepois, ultimoRelatorioCorretor } from "./semanal.js";
 
-export const navGestor = raw(`<a href="/gestor">Visão do time</a><a href="/gestor/corretores">Corretores</a>`);
+export const navGestor = raw(`<a href="/gestor">Visão do time</a><a href="/gestor/relatorio">Relatório semanal</a><a href="/gestor/corretores">Corretores</a>`);
 
 // Última análise de cada conversa de cliente (as anteriores ficam como histórico).
 const ULTIMAS_ANALISES = `
   SELECT DISTINCT ON (a.conversa_id) a.*, c.corretor_id
   FROM analises a JOIN conversas c ON c.id = a.conversa_id
   WHERE c.tipo = 'cliente'
-  ORDER BY a.conversa_id, a.criada_em DESC`;
+  ORDER BY a.conversa_id, a.semana DESC`;
 
 const SELO_CONEXAO: Record<string, Raw> = {
   conectado: raw(`<span class="selo bom">conectado</span>`),
@@ -118,6 +121,9 @@ export async function telaTime(): Promise<Raw> {
       <div class="kpi"><div class="valor">${formatarMinutos(geral?.primeira === null || geral?.primeira === undefined ? null : Number(geral.primeira))}</div><div class="rotulo">1ª resposta (mediana)</div></div>
       <div class="kpi"><div class="valor">${nota(geral?.nota)}</div><div class="rotulo">Nota média do atendimento</div></div>
     </div>
+    <p><a class="botao" href="/gestor/relatorio">Ver o relatório semanal do time</a></p>
+    ${await blocoEfeitoIa()}
+    <h2 style="margin-top:8px">Situação atual</h2>
     <div class="grade">
       <div class="card"><h2>Onde o time perde clientes</h2>
         <p class="suave pequeno">Momento em que cada conversa travou, segundo a análise mais recente.</p>
@@ -174,11 +180,16 @@ export async function telaCorretor(id: number): Promise<Raw | undefined> {
             floor(extract(epoch FROM now() - c.ultima_mensagem_em) / 3600)::int AS horas,
             a.nota_geral, a.categoria_perda
      FROM conversas c
-     LEFT JOIN LATERAL (SELECT nota_geral, categoria_perda FROM analises WHERE conversa_id = c.id ORDER BY criada_em DESC LIMIT 1) a ON TRUE
+     LEFT JOIN LATERAL (SELECT nota_geral, categoria_perda FROM analises WHERE conversa_id = c.id ORDER BY semana DESC LIMIT 1) a ON TRUE
      WHERE c.corretor_id = $1 AND c.tipo = 'cliente'
      ORDER BY c.ultima_mensagem_em DESC NULLS LAST LIMIT 300`,
     [id],
   );
+
+  const relatorio = await ultimoRelatorioCorretor(id);
+  const antes = await indicadores({ corretorId: id, periodo: "antes" });
+  const depois = await indicadores({ corretorId: id, periodo: "depois" });
+  const serie = await serieSemanal(id, somarDias(ultimaSemanaCompleta(), -7 * 15));
 
   return html`
     <h1>${corretor.nome}</h1>
@@ -189,8 +200,14 @@ export async function telaCorretor(id: number): Promise<Raw | undefined> {
       <div class="kpi"><div class="valor">${p.parados7dias}</div><div class="rotulo">Parados há 7+ dias</div></div>
       <div class="kpi"><div class="valor">${nota(p.notaMedia)}</div><div class="rotulo">Nota média</div></div>
     </div>
+    ${relatorio ? blocoRelatorioCorretor(relatorio.conteudo, relatorio.semana, (c) => `/gestor/conversa/${c}`) : html`<div class="info">O relatório semanal deste corretor aparece aqui depois da análise da semana.</div>`}
+    <h2 style="margin-top:8px">Evolução desde o uso de IA (${dataDoMarco()})</h2>
     <div class="grade">
-      <div class="card"><h2>Notas por critério</h2>
+      <div class="card"><h2>Nota média por semana</h2>${graficoSemanal(serie)}</div>
+      <div class="card"><h2>Critérios: antes x depois</h2>${tabelaAntesDepois(antes, depois)}</div>
+    </div>
+    <div class="grade">
+      <div class="card"><h2>Notas por critério (análises mais recentes)</h2>
         ${barras(
           CRITERIOS.map((c) => criterios.find((x) => x.criterio === c))
             .filter((x): x is { criterio: Criterio; media: string } => Boolean(x))

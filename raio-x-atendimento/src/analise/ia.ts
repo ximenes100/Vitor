@@ -1,111 +1,111 @@
-// Análise das conversas com Claude.
-// Duas etapas para economizar: (1) triagem barata decide se a conversa é de cliente;
-// (2) só conversas de cliente recebem a análise completa.
+// Chamadas ao Claude: triagem, análise semanal de conversas e relatórios.
+// Cada tarefa vira um "pedido" que pode ser executado na hora (chamada direta)
+// ou em lote (Batch API: metade do preço, resultado em até algumas horas).
 
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
+import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { readFileSync } from "node:fs";
-import { config } from "../config.js";
-import type { Metricas } from "../metricas.js";
-import { formatarMinutos } from "../metricas.js";
-import { AnaliseSchema, TriagemSchema, type Analise, type Triagem } from "./esquema.js";
+import type { z } from "zod";
 
 let cliente: Anthropic | undefined;
-function anthropic(): Anthropic {
+export function anthropic(): Anthropic {
   cliente ??= new Anthropic();
   return cliente;
 }
 
+export const processoComercial = readFileSync(new URL("../../config/processo-comercial.md", import.meta.url), "utf8");
+
+export interface Pedido<T> {
+  modelo: string;
+  esforco: "low" | "medium" | "high";
+  maxTokens: number;
+  /** Instruções fixas (iguais em todos os pedidos do mesmo tipo): ficam em cache para baratear. */
+  sistema: string;
+  conteudo: string;
+  esquema: z.ZodType<T>;
+}
+
 // Fallback do lado do servidor: se o modelo recusar a requisição, a API tenta outro modelo automaticamente,
-// na mesma chamada. Os modelos Haiku não têm esse recurso, então ele só é enviado para os demais.
+// na mesma chamada. Não existe para os modelos Haiku nem no processamento em lote.
 function fallback(modelo: string): { betas?: Anthropic.Beta.AnthropicBeta[]; fallbacks?: "default" } {
   if (modelo.includes("haiku")) return {};
   return { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" };
 }
 
-const processoComercial = readFileSync(new URL("../../config/processo-comercial.md", import.meta.url), "utf8");
-
-// Texto fixo (não muda entre conversas) para aproveitar o cache de prompt da API.
-const SISTEMA_ANALISE = `Você é um gestor comercial experiente do mercado imobiliário brasileiro e faz a revisão de atendimentos de corretores pelo WhatsApp.
-Seu objetivo é ajudar o corretor a converter mais: apontar com precisão onde a conversa travou e o que ele pode fazer melhor, com exemplos práticos.
-
-Como avaliar:
-- Use o processo comercial da imobiliária abaixo como referência do que é um bom atendimento.
-- Baseie cada nota em mensagens concretas da conversa e cite-as pelo número (#12). Não invente fatos que não estão na conversa.
-- As métricas de tempo de resposta foram calculadas pelo sistema e são confiáveis; use-as no critério de velocidade.
-- O conteúdo de áudios, fotos e documentos não está disponível (aparece como [áudio], [foto] etc.). Não penalize o que não dá para ver; considere apenas o efeito visível na conversa.
-- Dados pessoais foram mascarados ([cliente], [corretor], [telefone]...). Isso é proposital; não comente.
-- Seja direto e construtivo, como um bom gestor. As dicas e mensagens de exemplo devem estar em português do Brasil, no tom natural de WhatsApp, prontas para usar.
-- Notas: 0-3 ruim, 4-6 regular, 7-8 bom, 9-10 excelente. Use null quando o critério não se aplica (ex.: objeções em uma conversa sem objeções).
-
-<processo_comercial>
-${processoComercial}
-</processo_comercial>`;
-
-const SISTEMA_TRIAGEM = `Você classifica conversas de WhatsApp do celular de um corretor de imóveis.
-Responda se a conversa é um atendimento a cliente/lead imobiliário, uma conversa pessoal, ou outro contato profissional (colegas, parceiros, fornecedores, proprietários).
-Na dúvida entre cliente e outro, escolha cliente se a pessoa demonstra interesse em comprar, alugar ou investir em um imóvel.`;
-
-function verificarResposta<T>(resposta: { stop_reason: string | null; parsed_output?: T | null }): NonNullable<T> {
-  if (resposta.stop_reason === "refusal") throw new Error("O modelo recusou analisar esta conversa.");
-  if (resposta.stop_reason === "max_tokens") throw new Error("A resposta do modelo foi cortada (max_tokens).");
-  if (!resposta.parsed_output) throw new Error("O modelo não devolveu uma resposta no formato esperado.");
-  return resposta.parsed_output;
+function verificar(stopReason: string | null): void {
+  if (stopReason === "refusal") throw new Error("O modelo recusou esta análise.");
+  if (stopReason === "max_tokens") throw new Error("A resposta do modelo foi cortada (max_tokens).");
 }
 
-export async function triarComIa(amostra: string): Promise<Triagem> {
-  const resposta = await anthropic().beta.messages.parse({
-    model: config.ia.modeloTriagem,
-    max_tokens: 2000,
-    ...fallback(config.ia.modeloTriagem),
-    output_config: { effort: "low", format: betaZodOutputFormat(TriagemSchema) },
-    system: SISTEMA_TRIAGEM,
-    messages: [{ role: "user", content: `Trecho da conversa:\n\n${amostra}` }],
-  });
-  return verificarResposta(resposta);
-}
-
-export interface EntradaAnalise {
-  transcricao: string;
-  metricas: Metricas;
-  totalMensagens: number;
-  mensagensOmitidas: number;
-  etiquetaAtual: string | null;
-  agora: string;
-}
-
-export async function analisarComIa(entrada: EntradaAnalise): Promise<Analise> {
-  const m = entrada.metricas;
-  const contexto = [
-    `Data e hora atual: ${entrada.agora}`,
-    `Etiqueta atual no WhatsApp: ${entrada.etiquetaAtual ?? "nenhuma"}`,
-    `Mensagens: ${m.totalMensagens} (cliente ${m.mensagensCliente}, corretor ${m.mensagensCorretor}). Quem iniciou: ${m.quemIniciou ?? "—"}.`,
-    `Primeira resposta do corretor: ${formatarMinutos(m.primeiraRespostaMin)}. Tempo de resposta mediano: ${formatarMinutos(m.respostaMedianaMin)}; 90% das respostas em até ${formatarMinutos(m.respostaP90Min)}. Esperas acima de 24h: ${m.esperasAcimaDe24h}.`,
-    `Cliente aguardando resposta agora: ${m.clienteSemResposta ? "sim" : "não"}. Horas desde a última mensagem: ${m.horasDesdeUltimaMensagem ?? "—"}. Tentativas do corretor sem retorno no fim da conversa: ${m.tentativasSemRetorno}.`,
-    `Áudios do corretor: ${m.percentualAudiosCorretor}% das mensagens dele.`,
-    entrada.mensagensOmitidas > 0
-      ? `ATENÇÃO: a conversa é longa; as primeiras ${entrada.mensagensOmitidas} de ${entrada.totalMensagens} mensagens foram omitidas. Avalie o trecho abaixo e não tire conclusões sobre o início.`
-      : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
-
-  // Streaming evita timeout em conversas longas; finalMessage() devolve a resposta completa.
+/** Executa o pedido na hora. */
+export async function executar<T>(p: Pedido<T>): Promise<T> {
+  // Streaming evita timeout em entradas longas; finalMessage() devolve a resposta completa.
   const stream = anthropic().beta.messages.stream({
-    model: config.ia.modeloAnalise,
-    max_tokens: 32000,
-    ...fallback(config.ia.modeloAnalise),
-    output_config: { effort: "high", format: betaZodOutputFormat(AnaliseSchema) },
-    system: [{ type: "text", text: SISTEMA_ANALISE, cache_control: { type: "ephemeral" } }],
-    messages: [
-      {
-        role: "user",
-        content: `<metricas>\n${contexto}\n</metricas>\n\n<conversa>\n${entrada.transcricao}\n</conversa>\n\nAnalise este atendimento.`,
-      },
-    ],
+    model: p.modelo,
+    max_tokens: p.maxTokens,
+    ...fallback(p.modelo),
+    output_config: { effort: p.esforco, format: betaZodOutputFormat(p.esquema) },
+    system: [{ type: "text", text: p.sistema, cache_control: { type: "ephemeral" } }],
+    messages: [{ role: "user", content: p.conteudo }],
   });
   const resposta = await stream.finalMessage();
-  return verificarResposta(resposta);
+  verificar(resposta.stop_reason);
+  if (!resposta.parsed_output) throw new Error("O modelo não devolveu uma resposta no formato esperado.");
+  return resposta.parsed_output as T;
+}
+
+/** Converte o pedido no formato de um item de lote. */
+function itemDeLote<T>(customId: string, p: Pedido<T>): Anthropic.Messages.Batches.BatchCreateParams.Request {
+  const formato = zodOutputFormat(p.esquema);
+  return {
+    custom_id: customId,
+    params: {
+      model: p.modelo,
+      max_tokens: p.maxTokens,
+      output_config: { effort: p.esforco, format: { type: formato.type, schema: formato.schema } },
+      system: [{ type: "text", text: p.sistema, cache_control: { type: "ephemeral" } }],
+      messages: [{ role: "user", content: p.conteudo }],
+    },
+  };
+}
+
+/** Envia vários pedidos em um lote e devolve o id do lote. */
+export async function enviarLote(pedidos: { id: string; pedido: Pedido<unknown> }[]): Promise<string> {
+  const lote = await anthropic().messages.batches.create({ requests: pedidos.map((p) => itemDeLote(p.id, p.pedido)) });
+  return lote.id;
+}
+
+export type ResultadoLote = { id: string; ok: true; texto: string } | { id: string; ok: false; erro: string; tentarDeNovo: boolean };
+
+/** Devolve undefined enquanto o lote ainda está processando. */
+export async function resultadosDoLote(loteId: string): Promise<ResultadoLote[] | undefined> {
+  const lote = await anthropic().messages.batches.retrieve(loteId);
+  if (lote.processing_status !== "ended") return undefined;
+  const resultados: ResultadoLote[] = [];
+  for await (const r of await anthropic().messages.batches.results(loteId)) {
+    const id = r.custom_id;
+    if (r.result.type === "succeeded") {
+      const msg = r.result.message;
+      if (msg.stop_reason === "refusal" || msg.stop_reason === "max_tokens") {
+        resultados.push({ id, ok: false, erro: `Resposta interrompida (${msg.stop_reason})`, tentarDeNovo: false });
+        continue;
+      }
+      const texto = msg.content.map((b) => (b.type === "text" ? b.text : "")).join("");
+      resultados.push({ id, ok: true, texto });
+    } else if (r.result.type === "errored") {
+      const invalido = r.result.error.error.type === "invalid_request_error";
+      resultados.push({ id, ok: false, erro: `Erro no lote: ${r.result.error.error.message}`, tentarDeNovo: !invalido });
+    } else {
+      resultados.push({ id, ok: false, erro: `Pedido ${r.result.type}`, tentarDeNovo: true });
+    }
+  }
+  return resultados;
+}
+
+/** Valida o texto devolvido pelo lote contra o esquema esperado. */
+export function interpretar<T>(texto: string, esquema: z.ZodType<T>): T {
+  return esquema.parse(JSON.parse(texto));
 }
 
 export function descricaoErroIa(e: unknown): { mensagem: string; tentarDeNovo: boolean } {

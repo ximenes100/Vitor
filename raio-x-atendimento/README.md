@@ -1,23 +1,54 @@
 # Raio-X do Atendimento
 
-Ferramenta para analisar os atendimentos de WhatsApp dos corretores e mostrar **onde cada um perde clientes** e **o que fazer para converter mais**.
+Ferramenta para acompanhar, semana a semana, **como os corretores atendem os clientes no WhatsApp** e se o atendimento **está evoluindo com o uso de IA** (o time passou a usar o Claude a partir de novembro de 2026). Quando não está, ela gera sugestões: de como usar melhor a IA e de como atender melhor pessoalmente, inclusive por telefone.
 
 ## Como funciona
 
-1. **O corretor migra para o WhatsApp Business** no mesmo número. As conversas vão junto.
-2. **Ele abre o link pessoal** (`/c/<token>`), aceita os termos e **escaneia um QR Code**, como no WhatsApp Web. Isso usa a [Evolution API](https://doc.evolution-api.com).
-3. **O sistema importa o histórico** e passa a receber as mensagens novas em tempo real.
-4. **Triagem:** a IA separa conversas de **clientes** das **pessoais**. O conteúdo das pessoais é **apagado** e nunca aparece em painel.
-5. **Análise de cada atendimento com IA**, depois que a conversa "esfria" (30 min sem mensagens). Ela avalia:
-   - nota de 0 a 10 em 10 critérios (velocidade, qualificação, descoberta da necessidade, condução para visita, objeções, follow-up…);
-   - **o momento exato em que a conversa travou** (com o número da mensagem);
-   - etapa do funil e perfil do cliente;
-   - 3 dicas com **mensagem pronta** de exemplo e próximo passo sugerido.
-6. **Etiquetas automáticas:** o sistema aplica no WhatsApp do corretor a etiqueta da etapa (Lead novo, Qualificado, Visita agendada, Proposta, Fechou, Perdido). Se o corretor trocar a etiqueta à mão, a escolha dele prevalece.
-7. **O corretor recebe todo dia** no próprio WhatsApp: clientes esperando resposta, quem retomar e uma dica. Pelo link, ele vê as mensagens sugeridas com botão para abrir o WhatsApp.
-8. **O gestor vê o painel do time** (`/gestor`): onde o time perde clientes, funil, notas por critério e detalhe de cada corretor e conversa.
+**Coleta (contínua, sem IA)**
+1. O corretor migra para o **WhatsApp Business** no mesmo número. As conversas vão junto.
+2. Ele abre o link pessoal (`/c/<token>`), aceita os termos e **escaneia um QR Code**, como no WhatsApp Web. Isso usa a [Evolution API](https://doc.evolution-api.com).
+3. O sistema importa o histórico (em geral alguns meses) e recebe as mensagens novas em tempo real.
 
-O que a IA usa como referência de "bom atendimento" está em **`config/processo-comercial.md`**. Edite esse arquivo com o processo da sua imobiliária.
+**Análise (uma vez por semana, segunda de madrugada)**
+
+4. **Triagem:** a IA separa conversas de **clientes** das **pessoais**. O conteúdo das pessoais é **apagado**.
+5. **Cada conversa com movimento na semana é analisada uma vez**, avaliando só as mensagens daquela semana (as anteriores servem de contexto). A análise registra:
+   - notas de 0 a 10 em 10 critérios, o momento em que a conversa travou e a etapa do funil;
+   - **indícios de uso de IA** (texto estruturado, padronizado) e se o uso foi **personalizado** ou **genérico**;
+   - se **valia ter ligado**, as objeções e perguntas do cliente e a melhor mensagem do corretor.
+6. **Linha de base:** na primeira execução, as semanas **antes do marco** (padrão: 12 semanas) também são analisadas. Assim dá para comparar o "antes" e o "depois" de cada corretor.
+
+**Relatórios (segunda de manhã)**
+
+7. **Relatório do corretor**, no WhatsApp dele e na página pessoal:
+   - evolução desde o marco;
+   - 3 focos para a semana com mensagens de exemplo;
+   - **pedidos prontos para colar no Claude**;
+   - quando ligar e como conduzir a ligação.
+8. **Relatório do time**, para você (`/gestor/relatorio`):
+   - a IA está melhorando o atendimento?
+   - quem evolui e quem precisa de apoio;
+   - onde o time perde clientes;
+   - objeções e perguntas frequentes;
+   - **mensagens reais que funcionaram** (para treinamento);
+   - treinamentos sugeridos e alertas.
+9. **Painel do gestor** (`/gestor`):
+   - **antes x depois** do marco, critério por critério;
+   - nota do time semana a semana;
+   - tabela de evolução por corretor.
+
+**Etiquetas e lembrete diário (sem IA)**
+- O sistema aplica no WhatsApp do corretor a etiqueta da etapa (Lead novo, Qualificado, Visita agendada, Proposta, Fechou, Perdido). Se ele trocar a etiqueta à mão, a escolha dele prevalece.
+- Todo dia, o corretor recebe a lista de clientes esperando resposta.
+
+O que a IA considera "bom atendimento" está em **`config/processo-comercial.md`**. Edite com o processo da sua imobiliária.
+
+### Como o efeito da IA é medido
+Não dá para saber exatamente quem usa a IA. Por isso a comparação é feita de dois jeitos:
+- **Antes x depois do marco** (`MARCO_IA`, padrão 01/11/2026), para cada corretor e para o time.
+- **Indícios nas mensagens:** quem melhorou *e* mostra indícios de IA personalizada sugere efeito da IA; quem tem indícios de IA genérica recebe dicas de uso.
+
+Com poucas semanas depois do marco, as diferenças ainda são preliminares. O painel mostra quantas conversas sustentam cada número.
 
 ## Testar agora (sem WhatsApp e sem chave de IA)
 
@@ -26,14 +57,16 @@ Requisitos: Node 22+ e Postgres.
 ```bash
 npm install
 export DATABASE_URL=postgres://postgres:senha@localhost:5432/raiox
-npm run demo        # cria 3 corretores e conversas fictícias e roda a análise
+npm run demo        # cria 3 corretores com conversas antes e depois do marco e roda o ciclo semanal
 GESTOR_SENHA=teste npm start
 ```
 
 - Painel do gestor: http://localhost:3000/gestor (usuário `gestor`, senha `teste`).
 - Os links dos corretores de demonstração aparecem na saída do `npm run demo`.
 
-Sem `ANTHROPIC_API_KEY`, a análise é **simulada** (regras simples, só para ver as telas). Com a chave, `npm run demo` faz a análise real.
+Sem `ANTHROPIC_API_KEY`, a análise é **simulada** (regras simples, só para ver as telas). Com a chave, `USAR_LOTE=nao npm run demo` faz a análise real na hora, sem esperar o lote.
+
+Na demonstração, Rafael passa a usar IA de forma personalizada e melhora; Camila usa IA de forma genérica e piora; Diego não muda.
 
 ## Colocar em produção
 
@@ -56,19 +89,20 @@ Depois:
 
 ## Custos (estimativa: meça com o piloto)
 
-A análise usa por padrão o Claude Opus 5.5. Os preços são por milhão de tokens (US$ 4 de entrada, US$ 20 de saída). O roteiro de avaliação fica em cache para baratear.
+Configuração padrão:
+- **Haiku 5.5** para a triagem e a análise de cada conversa (tarefas de volume);
+- **Opus 5.5** só para os relatórios semanais;
+- tudo em **lote** (Batch API, metade do preço).
 
-| Item | Estimativa |
+| Item (150 corretores, ~30 conversas com movimento por corretor por semana) | Estimativa |
 |---|---|
-| Uma análise de conversa típica (~50 mensagens) | ~US$ 0,05 a 0,15 |
-| Importação inicial, por corretor (~150 conversas de clientes) | ~US$ 10 a 20 |
-| Operação diária, 150 corretores, ~10 conversas ativas cada | ~US$ 75 a 225 por dia |
+| Análise das ~4.500 conversas da semana (Haiku, em lote) | ~US$ 5–10 por semana |
+| 150 relatórios de corretor (Opus, em lote) | ~US$ 10–25 por semana |
+| Relatório do time (Opus) | ~US$ 1–2 por semana |
+| **Total semanal** | **~US$ 20–40 (US$ 80–160 por mês)** |
+| Linha de base, uma vez (12 semanas antes do marco) | ~US$ 40–100 |
 
-Como reduzir:
-
-- `MODELO_TRIAGEM=claude-haiku-5-5`: a triagem (cliente ou pessoal) é simples e fica muito mais barata.
-- `MODELO_ANALISE=claude-sonnet-5-5`: cerca de metade do custo do Opus. Compare a qualidade das dicas no piloto antes de decidir.
-- Aumente `ANALISE_MINIMO_NOVAS` (reanalisa menos vezes) e `ANALISE_ESPERA_MINUTOS`.
+Para gastar ainda menos, troque `MODELO_RELATORIO` por `claude-sonnet-5-5` (cerca de metade do custo do Opus). Compare a qualidade dos relatórios no piloto antes.
 
 Infraestrutura: uma VPS de ~R$ 100 a 300 por mês, conforme a escala.
 
@@ -95,7 +129,8 @@ Infraestrutura: uma VPS de ~R$ 100 a 300 por mês, conforme a escala.
 | `src/server.ts` | Rotas web, webhook e início da aplicação |
 | `src/evolution.ts` | Cliente da Evolution API (QR Code, mensagens, etiquetas) |
 | `src/webhook.ts`, `src/sincronizacao.ts`, `src/ingestao.ts` | Recebimento e importação das mensagens |
-| `src/analise/` | Triagem e análise com IA, análise simulada, fila |
+| `src/semanal/` | Ciclo semanal: triagem, análise por semana, estatísticas antes x depois, relatórios |
+| `src/analise/` | Chamadas à IA (direta e em lote), esquemas das respostas, análise simulada |
 | `src/metricas.ts` | Tempos de resposta e outras métricas calculadas sem IA |
 | `src/anonimizar.ts` | Mascaramento de dados pessoais |
 | `src/etiquetas.ts`, `src/funil.ts` | Etapas do funil e etiquetas do WhatsApp Business |
@@ -108,5 +143,5 @@ Comandos: `npm test` (testes), `npm run typecheck`, `npm run migrate` (cria as t
 ## Escala (150 corretores)
 
 - **Evolution:** cada corretor é uma instância. 150 instâncias numa única Evolution funcionam com ~4 a 8 GB de RAM. Monitore memória e reinicializações.
-- **Análise:** a fila processa `ANALISE_CONCORRENCIA` conversas em paralelo. Ajuste conforme o limite da sua conta na Anthropic.
+- **Análise:** o processamento em lote aceita até 10 mil conversas por envio e costuma terminar em menos de 1 hora (no máximo 24 h). Por isso os relatórios ficam prontos na segunda de manhã.
 - **Banco:** o Postgres atende tranquilamente. Faça backup diário.

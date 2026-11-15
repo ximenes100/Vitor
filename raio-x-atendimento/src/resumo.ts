@@ -28,7 +28,7 @@ export async function followups(corretorId: number, limite = 50): Promise<ItemFo
             a.resultado->'proximo_passo'->>'mensagem_sugerida' AS mensagem_sugerida,
             a.resultado->'proximo_passo'->>'urgencia' AS urgencia
      FROM conversas c
-     LEFT JOIN LATERAL (SELECT resultado FROM analises WHERE conversa_id = c.id ORDER BY criada_em DESC LIMIT 1) a ON TRUE
+     LEFT JOIN LATERAL (SELECT resultado FROM analises WHERE conversa_id = c.id ORDER BY semana DESC LIMIT 1) a ON TRUE
      WHERE c.corretor_id = $1 AND c.tipo = 'cliente'
        AND COALESCE(c.etapa, '') NOT IN ('fechou', 'perdido')
        AND c.ultima_mensagem_em > now() - interval '60 days'
@@ -69,13 +69,13 @@ export async function panoramaCorretor(corretorId: number): Promise<Panorama> {
   const notas = await queryOne<{ media: string | null }>(
     `SELECT avg(nota_geral) AS media FROM (
        SELECT DISTINCT ON (a.conversa_id) a.nota_geral FROM analises a JOIN conversas c ON c.id = a.conversa_id
-       WHERE c.corretor_id = $1 ORDER BY a.conversa_id, a.criada_em DESC) t`,
+       WHERE c.corretor_id = $1 ORDER BY a.conversa_id, a.semana DESC) t`,
     [corretorId],
   );
   const perda = await queryOne<{ categoria_perda: CategoriaPerda }>(
     `SELECT categoria_perda FROM (
        SELECT DISTINCT ON (a.conversa_id) a.categoria_perda FROM analises a JOIN conversas c ON c.id = a.conversa_id
-       WHERE c.corretor_id = $1 ORDER BY a.conversa_id, a.criada_em DESC) t
+       WHERE c.corretor_id = $1 ORDER BY a.conversa_id, a.semana DESC) t
      WHERE categoria_perda NOT IN ('nenhuma', 'cliente_sem_perfil')
      GROUP BY categoria_perda ORDER BY count(*) DESC LIMIT 1`,
     [corretorId],
@@ -97,7 +97,7 @@ export async function dicaDoDia(corretorId: number): Promise<Analise["dicas"][nu
   const linha = await queryOne<{ dica: Analise["dicas"][number] }>(
     `SELECT a.resultado->'dicas'->0 AS dica FROM analises a JOIN conversas c ON c.id = a.conversa_id
      WHERE c.corretor_id = $1 AND jsonb_array_length(a.resultado->'dicas') > 0
-     ORDER BY a.criada_em DESC LIMIT 1`,
+     ORDER BY a.semana DESC LIMIT 1`,
     [corretorId],
   );
   return linha?.dica ?? null;

@@ -87,3 +87,23 @@ test("reconhece etiquetas do funil ignorando acentos, maiúsculas e emojis", () 
   assert.equal(etapaPorNomeDeEtiqueta("Lead Novo"), "lead_novo");
   assert.equal(etapaPorNomeDeEtiqueta("Novo pedido"), undefined);
 });
+
+test("semanas: segunda-feira, semana anterior completa e período em relação ao marco", async () => {
+  const { inicioDaSemana, ultimaSemanaCompleta, periodoDaSemana, semanaDe, limitesDaSemana } = await import("../src/semanal/semanas.js");
+  assert.equal(inicioDaSemana("2026-11-15"), "2026-11-09"); // domingo -> segunda anterior
+  assert.equal(inicioDaSemana("2026-11-09"), "2026-11-09");
+  assert.equal(ultimaSemanaCompleta(new Date("2026-11-15T15:00:00Z")), "2026-11-02");
+  // Domingo 23h30 em Brasília ainda é a mesma semana (02h30 UTC de segunda).
+  assert.equal(semanaDe(new Date("2026-11-16T02:30:00Z")), "2026-11-09");
+  assert.equal(periodoDaSemana("2026-10-26", "2026-11-01"), "antes");
+  assert.equal(periodoDaSemana("2026-11-02", "2026-11-01"), "depois");
+  assert.equal(limitesDaSemana("2026-11-09").inicio.toISOString(), "2026-11-09T03:00:00.000Z");
+});
+
+test("tendência só muda com diferença de pelo menos meio ponto", async () => {
+  const { tendencia } = await import("../src/semanal/estatisticas.js");
+  assert.equal(tendencia(5, 5.4), "estavel");
+  assert.equal(tendencia(5, 5.5), "melhorando");
+  assert.equal(tendencia(6, 5.4), "piorando");
+  assert.equal(tendencia(null, 6), "sem_dados");
+});

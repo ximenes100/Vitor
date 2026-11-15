@@ -51,7 +51,7 @@ main { max-width: 1180px; margin: 0 auto; padding: 20px 16px 60px; }
 h1 { font-size: 24px; margin: 4px 0 16px; }
 h2 { font-size: 17px; margin: 0 0 12px; }
 h3 { font-size: 15px; margin: 0 0 6px; }
-.grade { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.grade { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); align-items: start; }
 .kpis { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); margin-bottom: 16px; }
 .card { background: var(--card); border: 1px solid var(--borda); border-radius: 12px; padding: 16px; margin-bottom: 16px; min-width: 0; }
 .kpi { background: var(--card); border: 1px solid var(--borda); border-radius: 12px; padding: 14px 16px; }
@@ -96,6 +96,17 @@ form.linha { display: flex; gap: 8px; flex-wrap: wrap; }
 .passos li::before { content: counter(passo); position: absolute; left: 0; top: 0; width: 28px; height: 28px; border-radius: 50%; background: var(--marca); color: #fff; display: grid; place-items: center; font-weight: 700; }
 .qr { width: 264px; max-width: 100%; aspect-ratio: 1; border: 1px solid var(--borda); border-radius: 12px; display: grid; place-items: center; background: #fff; }
 .qr img { width: 100%; height: 100%; }
+.colunas { display: flex; align-items: flex-end; gap: 6px; height: 190px; padding-top: 8px; overflow-x: auto; }
+.coluna { flex: 1 0 34px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; font-size: 11px; }
+.coluna .barra-v { width: 100%; max-width: 38px; border-radius: 6px 6px 0 0; background: #94a3b8; }
+.coluna.depois .barra-v { background: var(--marca); }
+.coluna .valor { font-weight: 700; margin-bottom: 3px; }
+.coluna .rotulo { color: var(--suave); margin-top: 4px; white-space: nowrap; }
+.legenda { display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: #94a3b8; vertical-align: middle; }
+.legenda.depois { background: var(--marca); }
+.prompt { background: #f1f5f9; border-left: 3px solid #64748b; padding: 8px 10px; border-radius: 6px; font-family: ui-monospace, Menlo, monospace; font-size: 13px; white-space: pre-wrap; }
+.destaque-card { border-left: 4px solid var(--marca); }
+select { font: inherit; padding: 8px 10px; border: 1px solid var(--borda); border-radius: 8px; background: #fff; max-width: 100%; }
 @media (max-width: 640px) {
   .barra { grid-template-columns: 1fr 40px; }
   .barra .trilho { grid-column: 1 / -1; order: 3; }
