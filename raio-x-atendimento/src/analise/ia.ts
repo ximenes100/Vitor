@@ -16,12 +16,12 @@ function anthropic(): Anthropic {
   return cliente;
 }
 
-// Fallback do lado do servidor: se um modelo recusar a requisição, a API tenta o modelo indicado
-// automaticamente, na mesma chamada. Remova estas duas linhas se não quiser esse comportamento.
-const FALLBACK: { betas: Anthropic.Beta.AnthropicBeta[]; fallbacks: "default" } = {
-  betas: ["server-side-fallback-2026-07-01"],
-  fallbacks: "default",
-};
+// Fallback do lado do servidor: se o modelo recusar a requisição, a API tenta outro modelo automaticamente,
+// na mesma chamada. Os modelos Haiku não têm esse recurso, então ele só é enviado para os demais.
+function fallback(modelo: string): { betas?: Anthropic.Beta.AnthropicBeta[]; fallbacks?: "default" } {
+  if (modelo.includes("haiku")) return {};
+  return { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" };
+}
 
 const processoComercial = readFileSync(new URL("../../config/processo-comercial.md", import.meta.url), "utf8");
 
@@ -57,7 +57,7 @@ export async function triarComIa(amostra: string): Promise<Triagem> {
   const resposta = await anthropic().beta.messages.parse({
     model: config.ia.modeloTriagem,
     max_tokens: 2000,
-    ...FALLBACK,
+    ...fallback(config.ia.modeloTriagem),
     output_config: { effort: "low", format: betaZodOutputFormat(TriagemSchema) },
     system: SISTEMA_TRIAGEM,
     messages: [{ role: "user", content: `Trecho da conversa:\n\n${amostra}` }],
@@ -94,7 +94,7 @@ export async function analisarComIa(entrada: EntradaAnalise): Promise<Analise> {
   const stream = anthropic().beta.messages.stream({
     model: config.ia.modeloAnalise,
     max_tokens: 32000,
-    ...FALLBACK,
+    ...fallback(config.ia.modeloAnalise),
     output_config: { effort: "high", format: betaZodOutputFormat(AnaliseSchema) },
     system: [{ type: "text", text: SISTEMA_ANALISE, cache_control: { type: "ephemeral" } }],
     messages: [
