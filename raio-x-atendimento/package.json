@@ -1,0 +1,28 @@
+{
+  "name": "raio-x-atendimento",
+  "version": "0.1.0",
+  "description": "Coleta conversas de WhatsApp dos corretores, organiza com etiquetas e analisa o atendimento com IA.",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "migrate": "tsx src/scripts/migrate.ts",
+    "demo": "tsx src/scripts/demo.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
+    "@fastify/formbody": "^9.0.2",
+    "fastify": "^5.12.8",
+    "pg": "^8.23.1",
+    "tsx": "^4.23.15",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/pg": "^8.23.1",
+    "typescript": "^7.0.2"
+  },
+  "private": true,
+  "type": "module"
+}
